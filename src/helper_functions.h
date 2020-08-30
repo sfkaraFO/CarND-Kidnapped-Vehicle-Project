@@ -14,6 +14,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <random>
 #include "map.h"
 
 // for portability of M_PI (Vis Studio, MinGW, etc.)
@@ -247,5 +248,34 @@ inline bool read_landmark_data(std::string filename,
   }
   return true;
 }
+
+
+inline double NormalRandom(double mean, double stddev){
+    
+    static std::random_device randomSeed;
+    static std::mt19937 randomEngine(randomSeed());
+    std::normal_distribution<double> normal(mean, stddev); 
+    return normal(randomEngine);
+}
+
+
+inline double UniformReelRandom(double min, double max){
+    
+    static std::random_device randomSeed;
+    static std::mt19937 randomEngine(randomSeed());
+    std::uniform_real_distribution<double> normal(min, max); 
+    return normal(randomEngine);
+}
+
+
+inline double UniformIntRandom(int min, int max){
+    
+    static std::random_device randomSeed;
+    static std::mt19937 randomEngine(randomSeed());
+    std::uniform_int_distribution<int> normal(min, max); 
+    return normal(randomEngine);
+}
+
+
 
 #endif  // HELPER_FUNCTIONS_H_
