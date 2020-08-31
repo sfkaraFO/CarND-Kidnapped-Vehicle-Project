@@ -21,6 +21,8 @@
 using std::string;
 using std::vector;
 
+static std::default_random_engine gen;
+
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
   /**
    * TODO: Set the number of particles. Initialize all particles to 
@@ -34,9 +36,9 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
   for (int i=0; i<num_particles; ++i){
     Particle particle;
     particle.id = i;
-    particle.x = x + NormalRandom(0,std[0]);
-    particle.y = y + NormalRandom(0,std[1]);
-    particle.theta = theta + NormalRandom(0,std[2]);
+    particle.x = NormalRandom(x, std[0]);
+    particle.y = NormalRandom(y, std[1]);
+    particle.theta = NormalRandom(theta, std[2]);
     particle.weight = 1.0;
     particles.push_back(particle);
   }
@@ -55,21 +57,21 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
 
   for (auto& particle: particles){
 
-    if (yaw_rate <= 0.00001) {
+    if (abs(yaw_rate) <= 0.00001) {
 
       particle.x = particle.x + delta_t*velocity*cos(particle.theta);
       particle.y = particle.y + delta_t*velocity*sin(particle.theta);
     }
     else {
       
-      particle.x = particle.x + velocity/yaw_rate*(sin(particle.theta+yaw_rate*delta_t) - sin(particle.theta));
-      particle.y = particle.y + velocity/yaw_rate*(cos(particle.theta) - cos(particle.theta+yaw_rate*delta_t));
+      particle.x = particle.x + velocity/yaw_rate*(sin(particle.theta + yaw_rate*delta_t) - sin(particle.theta));
+      particle.y = particle.y + velocity/yaw_rate*(cos(particle.theta) - cos(particle.theta + yaw_rate*delta_t));
       particle.theta = particle.theta + yaw_rate*delta_t;
     }
 
-    particle.x = particle.x + NormalRandom(0, std_pos[0]);
-    particle.y = particle.y + NormalRandom(0, std_pos[1]);
-    particle.theta = particle.theta + NormalRandom(0, std_pos[2]);
+    particle.x = NormalRandom(particle.x, std_pos[0]);
+    particle.y = NormalRandom(particle.y, std_pos[1]);
+    particle.theta = NormalRandom(particle.theta, std_pos[2]);
 
   }
   
@@ -85,15 +87,17 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
    *   probably find it useful to implement this method and use it as a helper 
    *   during the updateWeights phase.
    */
-  for (auto transObservation: observations){
+  for (auto& transObservation: observations){
     
     double minDistance = std::numeric_limits<double>::max();
     
     for (auto landmark: predicted){
 
-      if ( dist(transObservation.x, transObservation.y, landmark.x, landmark.y) < minDistance ){
+      double distance = dist(transObservation.x, transObservation.y, landmark.x, landmark.y);
+      if ( distance < minDistance ){
         
         transObservation.id = landmark.id;
+        minDistance = distance;
       }
     }
   }
@@ -116,6 +120,16 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
    *   (look at equation 3.33) http://planning.cs.uiuc.edu/node99.html
    */
 
+  // Reset the particle weights if the resampling is performed
+  if (resamplingPerformed){
+
+    for (auto& particle : particles){
+      
+      particle.weight = 1.0;
+    }
+  }
+
+
   for (auto& particle: particles){
     
     vector<LandmarkObs> predictedLandmarks;
@@ -135,14 +149,14 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
       LandmarkObs transObs;
       transObs.x = cos(particle.theta)*obs.x - sin(particle.theta)*obs.y + particle.x;
-      transObs.y = sin(particle.theta)*obs.x + cos(particle.theta)*obs.y + particle.x;
+      transObs.y = sin(particle.theta)*obs.x + cos(particle.theta)*obs.y + particle.y;
 
       transObservations.push_back(transObs);
     }
 
     dataAssociation(predictedLandmarks, transObservations);
 
-    particle.weight = 1.0;
+    double likelihood = 1.0;
 
     for (auto transObs: transObservations){
 
@@ -154,17 +168,31 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
           
           x = landmark.x;
           y = landmark.y;
+          break;
         }
       }
 
       double obs_w = ( 1/(2*M_PI*std_landmark[0]*std_landmark[1]))
-                     * exp( -( pow(x - transObs.x, 2) / (2*pow(std_landmark[0], 2))
-                            + (pow(y - transObs.y, 2) / (2*pow(std_landmark[1], 2))) ) );
+                     * exp( -( pow(transObs.x - x, 2) / (2*pow(std_landmark[0],2)) +
+                               pow(transObs.y - y, 2) / (2*pow(std_landmark[1],2)) ) );
 
-      particle.weight = particle.weight * obs_w;
+      likelihood = likelihood * obs_w;
 
     }
 
+    particle.weight = particle.weight*likelihood;
+
+  }
+
+  double sumOfWeights = 0.0;
+  for (auto& particle : particles) {
+
+    sumOfWeights = sumOfWeights + particle.weight;
+  }
+
+  for (auto& particle : particles) {
+
+    particle.weight = particle.weight / sumOfWeights;
   }
 
 }
@@ -177,32 +205,43 @@ void ParticleFilter::resample() {
    *   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
    */
 
-  vector<Particle> new_particles;
-
-  // get all of the current weights
+  double sumOfSquareWeights = 0.0;
   vector<double> weights;
-  for (int i = 0; i < num_particles; i++) {
-    weights.push_back(particles[i].weight);
+  for (auto particle: particles) {
+
+    sumOfSquareWeights += particle.weight*particle.weight;
+    weights.push_back(particle.weight);
   }
 
-  int index = UniformIntRandom(0, num_particles-1);
+  double Neff = 1/sumOfSquareWeights;
+  if ( Neff < ((double)num_particles/2) ){
 
-  // get max weight
-  double max_weight = *max_element(weights.begin(), weights.end());
+    int index = UniformIntRandom(0, num_particles);
 
-  double beta = 0.0;
+    auto it = max_element(weights.begin(), weights.end());
+    double max_weight = *it;
 
-  // spin the resample wheel!
-  for (int i = 0; i < num_particles; i++) {
-    beta += UniformReelRandom(0.0, max_weight) * 2.0;
-    while (beta > weights[index]) {
-      beta -= weights[index];
-      index = (index + 1) % num_particles;
+    double beta = 0.0;
+
+    vector<Particle> newParticles;
+
+    for (int i = 0; i < num_particles; ++i) {
+      beta = beta + UniformReelRandom(.0, 2*max_weight);
+      while (beta > weights[index]) {
+        beta = beta - weights[index];
+        index = (index + 1) % num_particles;
+      }
+      newParticles.push_back(particles[index]);
     }
-    new_particles.push_back(particles[index]);
-  }
 
-  particles = new_particles;
+    particles = newParticles;
+
+    resamplingPerformed = true;
+  }
+  else{
+
+    resamplingPerformed = false;
+  }
 }
 
 void ParticleFilter::SetAssociations(Particle& particle, 

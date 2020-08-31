@@ -120,6 +120,10 @@ class ParticleFilter {
   
   // Vector of weights of all particles
   std::vector<double> weights; 
+
+  // Check whether the resampling happen or not
+  bool resamplingPerformed{false};
+
 };
 
 #endif  // PARTICLE_FILTER_H_
