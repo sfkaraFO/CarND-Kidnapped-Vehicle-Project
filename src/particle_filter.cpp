@@ -32,6 +32,9 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
    * NOTE: Consult particle_filter.h for more information about this method 
    *   (and others in this file).
    */
+
+  // Initialize all particles to initial measurements. Add Gaussian noise to corresponding values. 
+  // Set all weights to 1 since we do not have further information about the weights yet. 
   num_particles = 100;  // TODO: Set the number of particles
   for (int i=0; i<num_particles; ++i){
     Particle particle;
@@ -55,6 +58,9 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
    *  http://www.cplusplus.com/reference/random/default_random_engine/
    */
 
+  // Predict the particles using yaw_rate and velocity information. 
+  // If the yaw_rate is close to zero use simple model.
+  // Else more complex model is used.
   for (auto& particle: particles){
 
     if (abs(yaw_rate) <= 0.00001) {
@@ -69,6 +75,7 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
       particle.theta = particle.theta + yaw_rate*delta_t;
     }
 
+    // Insert the process noise to the particles.
     particle.x = NormalRandom(particle.x, std_pos[0]);
     particle.y = NormalRandom(particle.y, std_pos[1]);
     particle.theta = NormalRandom(particle.theta, std_pos[2]);
@@ -87,6 +94,9 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
    *   probably find it useful to implement this method and use it as a helper 
    *   during the updateWeights phase.
    */
+
+  // Assign the predicted landmarks to transformed observations.
+  // Find the minimum distance between points.
   for (auto& transObservation: observations){
     
     double minDistance = std::numeric_limits<double>::max();
@@ -120,7 +130,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
    *   (look at equation 3.33) http://planning.cs.uiuc.edu/node99.html
    */
 
-  // Reset the particle weights if the resampling is performed
+  // Reset the particle weights if the resampling is performed. Else use the previous values.
   if (resamplingPerformed){
 
     for (auto& particle : particles){
@@ -132,6 +142,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
   for (auto& particle: particles){
     
+    // Find the closest landmarks to the corresponding particles.
     vector<LandmarkObs> predictedLandmarks;
     for (auto landmark: map_landmarks.landmark_list){
       if (dist(particle.x, particle.y, landmark.x_f, landmark.y_f) < sensor_range) {
@@ -144,6 +155,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
       }
     }
 
+    // Transform the observations to the map coordinates.
     vector<LandmarkObs> transObservations;
     for (auto obs: observations){
 
@@ -154,10 +166,12 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
       transObservations.push_back(transObs);
     }
 
+    // Associate the closests landmarks to the transformed measurements.
     dataAssociation(predictedLandmarks, transObservations);
 
     double likelihood = 1.0;
 
+    // Get the transformed measurement's landmark id.
     for (auto transObs: transObservations){
 
       double x;
@@ -172,10 +186,12 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
         }
       }
 
+      // Calculate the likelihood value using this id.
       double obs_w = ( 1/(2*M_PI*std_landmark[0]*std_landmark[1]))
                      * exp( -( pow(transObs.x - x, 2) / (2*pow(std_landmark[0],2)) +
                                pow(transObs.y - y, 2) / (2*pow(std_landmark[1],2)) ) );
 
+      // Multiply each measurements likelihood since they are independent.
       likelihood = likelihood * obs_w;
 
     }
@@ -184,6 +200,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
   }
 
+  // Calculate sum of the weights and mormalize them.
   double sumOfWeights = 0.0;
   for (auto& particle : particles) {
 
@@ -205,6 +222,7 @@ void ParticleFilter::resample() {
    *   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
    */
 
+  // Calculate the sum of squares.
   double sumOfSquareWeights = 0.0;
   vector<double> weights;
   for (auto particle: particles) {
@@ -213,11 +231,15 @@ void ParticleFilter::resample() {
     weights.push_back(particle.weight);
   }
 
+  // Calculate the effective number of particles.
   double Neff = 1/sumOfSquareWeights;
   if ( Neff < ((double)num_particles/2) ){
+  // if (true) {
 
+    // Pick a random index.
     int index = UniformIntRandom(0, num_particles);
 
+    // Find the maximum valued weight.
     auto it = max_element(weights.begin(), weights.end());
     double max_weight = *it;
 
@@ -226,6 +248,7 @@ void ParticleFilter::resample() {
     vector<Particle> newParticles;
 
     for (int i = 0; i < num_particles; ++i) {
+      // Generate uniform reel number
       beta = beta + UniformReelRandom(.0, 2*max_weight);
       while (beta > weights[index]) {
         beta = beta - weights[index];
