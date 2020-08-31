@@ -1,3 +1,7 @@
+This is a completed version of Udacity's CarND - Kidnapped Vehicle Project. Information about the project is provided below by Udacity.
+
+E-mail: skara8@ford.com.tr
+
 # Overview
 This repository contains all the code needed to complete the final project for the Localization course in Udacity's Self-Driving Car Nanodegree.
 
