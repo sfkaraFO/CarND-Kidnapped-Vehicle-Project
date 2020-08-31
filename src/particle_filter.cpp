@@ -231,10 +231,10 @@ void ParticleFilter::resample() {
     weights.push_back(particle.weight);
   }
 
-  // Calculate the effective number of particles.
+  // Calculate the effective number of particles. With low number of particles there could be degeneracy problem.
   double Neff = 1/sumOfSquareWeights;
-  if ( Neff < ((double)num_particles/2) ){
-  // if (true) {
+  // if ( Neff < ((double)num_particles/2) ){
+  if (true) {
 
     // Pick a random index.
     int index = UniformIntRandom(0, num_particles);
